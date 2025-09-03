@@ -9,6 +9,7 @@ import android.view.Surface;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 
@@ -18,7 +19,8 @@ class StreamPlayer extends Thread {
 
     interface Status { void say(String text); }
 
-    private static final String HOST = "127.0.0.1";
+    // 127.0.0.1 means "over the cable" (adb reverse); anything else is a Mac on the network
+    static String host = "127.0.0.1";
     private static final int PORT = 8090;
     private static final int MAX_NAL = 4 * 1024 * 1024;
 
@@ -35,6 +37,7 @@ class StreamPlayer extends Thread {
     private long lastRecvAt = 0, worstRecv = 0, shownRecv = 0;
     private int lastSeq = 0;
     private BufferedInputStream buffered;
+    private volatile OutputStream out;
     private final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
     private static final byte[] START = {0, 0, 0, 1};
     private InputStream stream;
@@ -56,37 +59,24 @@ class StreamPlayer extends Thread {
             Socket sock = null;
             try {
                 status.say("подключаюсь…");
-                sock = new Socket(HOST, PORT);
+                sock = new Socket(host, PORT);
                 sock.setTcpNoDelay(true);
                 sock.setReceiveBufferSize(64 * 1024);   // a big buffer just hides lag in itself
-                sock.getOutputStream().write(
-                        ("GET /h264 HTTP/1.0\r\nHost: localhost\r\n\r\n").getBytes("US-ASCII"));
-                sock.getOutputStream().flush();
+                out = sock.getOutputStream();
                 InputStream in = sock.getInputStream();
-                skipHeaders(in);
                 stream = in;
                 status.say("жду ключевой кадр…");
                 readStream(in);
             } catch (Exception e) {
                 status.say("нет связи: " + e.getMessage() + " (повтор)");
             } finally {
+                out = null;
                 closeCodec();
                 try { if (sock != null) sock.close(); } catch (Exception ignored) {}
             }
             if (running) {
                 try { Thread.sleep(700); } catch (InterruptedException e) { return; }
             }
-        }
-    }
-
-    private void skipHeaders(InputStream in) throws Exception {
-        int state = 0;
-        while (state < 4) {
-            int c = in.read();
-            if (c < 0) throw new Exception("сервер закрыл соединение");
-            if ((state == 0 || state == 2) && c == '\r') state++;
-            else if ((state == 1 || state == 3) && c == '\n') state++;
-            else state = 0;
         }
     }
 
@@ -108,7 +98,7 @@ class StreamPlayer extends Thread {
                 if (g > worstRecv) worstRecv = g;
             }
             lastRecvAt = recvNow;
-            if (lastSeq > 0 && lastSeq % 30 == 0) ack("r:" + lastSeq);   // arrived
+            
             handleNal(nal, len);
         }
     }
@@ -162,7 +152,7 @@ class StreamPlayer extends Thread {
             codec.releaseOutputBuffer(out, true);
             frames++;
             drawn++;
-            if (seq > 0 && seq % 30 == 0) ack("d:" + seq);
+            if (seq > 0 && seq % 30 == 0) ack(Long.toString(seq));
 
             long now = System.currentTimeMillis();
             if (lastFrameAt > 0) {
@@ -220,16 +210,13 @@ class StreamPlayer extends Thread {
     /** Tell the Mac this frame just hit the screen - it times the round trip itself,
      *  which is the only clock we can trust here. */
     private void ack(String body) {
-        new Thread(() -> {
-            try (Socket sk = new Socket(HOST, PORT)) {
-                sk.setTcpNoDelay(true);
-                byte[] b = body.getBytes("US-ASCII");
-                sk.getOutputStream().write(("POST /ack HTTP/1.0\r\nContent-Length: "
-                        + b.length + "\r\n\r\n").getBytes("US-ASCII"));
-                sk.getOutputStream().write(b);
-                sk.getOutputStream().flush();
-            } catch (Exception ignored) {}
-        }).start();
+        // one line back down the same socket - the Mac times the round trip itself
+        final OutputStream o = out;
+        if (o == null) return;
+        try {
+            o.write(("ACK " + body + "\n").getBytes("US-ASCII"));
+            o.flush();
+        } catch (Exception ignored) {}
     }
 
     private void closeCodec() {
