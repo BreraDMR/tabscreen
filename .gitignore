@@ -1,0 +1,18 @@
+# build tools downloaded by setup.sh
+tools/jdk-*
+tools/sdk/
+
+# build output
+android/build/
+android/debug.keystore
+swift/capture
+swift/TabCapture.app/
+
+# python
+.venv/
+__pycache__/
+
+# local notes about one particular tablet
+moi-otklyucheniya.txt
+otklyucheno-na-planshete.txt
+tools/disabled-packages.txt
