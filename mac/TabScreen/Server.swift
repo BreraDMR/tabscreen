@@ -55,8 +55,16 @@ final class Server: @unchecked Sendable {
             tcp.noDelay = true                     // Nagle would sit on our small writes
             tcp.connectionTimeout = 5
         }
+        // Listen on IPv4: by default this ends up IPv6-only and the tablet gets
+        // "connection refused" while the port looks open in lsof.
+        if let ip = params.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
+            ip.version = .v4
+        }
         let listener = try NWListener(using: params, on: port)
         listener.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
+        listener.stateUpdateHandler = { state in
+            print("listener: \(state)")
+        }
         listener.start(queue: .global(qos: .userInitiated))
         self.listener = listener
         startAnnouncing()
@@ -227,6 +235,31 @@ final class Server: @unchecked Sendable {
     /// Shouts "I'm here" on the local network once a second so the tablet can find the
     /// Mac by itself - nobody should have to type an IP address. Plain BSD sockets here:
     /// Network.framework quietly refuses to broadcast.
+    /// Broadcast address of every network this Mac is on (192.168.0.255 and friends).
+    private static func subnetBroadcasts() -> [String] {
+        var out: [String] = []
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return out }
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = ptr {
+            let flags = Int32(current.pointee.ifa_flags)
+            if (flags & IFF_UP) == IFF_UP, (flags & IFF_LOOPBACK) == 0,
+               (flags & IFF_BROADCAST) == IFF_BROADCAST,
+               let broadcast = current.pointee.ifa_dstaddr,
+               broadcast.pointee.sa_family == UInt8(AF_INET) {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if getnameinfo(broadcast, socklen_t(broadcast.pointee.sa_len), &host,
+                               socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    let ip = String(cString: host)
+                    if !ip.isEmpty, ip != "0.0.0.0" { out.append(ip) }
+                }
+            }
+            ptr = current.pointee.ifa_next
+        }
+        freeifaddrs(ifaddr)
+        return out
+    }
+
     private func startAnnouncing() {
         announcing = true
         let name = Host.current().localizedName ?? "Mac"
@@ -236,17 +269,20 @@ final class Server: @unchecked Sendable {
             var yes: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &yes, socklen_t(MemoryLayout<Int32>.size))
 
-            var addr = sockaddr_in()
-            addr.sin_family = sa_family_t(AF_INET)
-            addr.sin_port = UInt16(8089).bigEndian
-            addr.sin_addr.s_addr = INADDR_BROADCAST
-
             let message = Array("TABSCREEN \(name)".utf8)
             while self?.announcing == true {
-                _ = withUnsafePointer(to: &addr) { ptr in
-                    ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                        sendto(fd, message, message.count, 0, sa,
-                               socklen_t(MemoryLayout<sockaddr_in>.size))
+                var targets = ["255.255.255.255"]
+                targets.append(contentsOf: Server.subnetBroadcasts())
+                for target in targets {
+                    var addr = sockaddr_in()
+                    addr.sin_family = sa_family_t(AF_INET)
+                    addr.sin_port = UInt16(8089).bigEndian
+                    addr.sin_addr.s_addr = inet_addr(target)
+                    _ = withUnsafePointer(to: &addr) { ptr in
+                        ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                            sendto(fd, message, message.count, 0, sa,
+                                   socklen_t(MemoryLayout<sockaddr_in>.size))
+                        }
                     }
                 }
                 Thread.sleep(forTimeInterval: 1.0)

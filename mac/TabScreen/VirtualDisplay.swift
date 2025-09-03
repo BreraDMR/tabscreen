@@ -38,11 +38,26 @@ enum VirtualDisplay {
         }
     }
 
-    /// Anything that isn't a real, physically connected screen is our candidate.
+    /// Ask BetterDisplay which display is the virtual one. Guessing "the last
+    /// non-builtin screen" picks the wrong one as soon as a real monitor is plugged in.
     static func likelyVirtual() -> CGDirectDisplayID? {
+        let raw = run(["get", "-identifiers"], timeout: 4)
+        if let data = ("[" + raw + "]").data(using: .utf8),
+           let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            for item in items where (item["deviceType"] as? String) == "VirtualScreen" {
+                let id: Int?
+                if let n = item["displayID"] as? Int { id = n }
+                else if let str = item["displayID"] as? String { id = Int(str) }
+                else { id = nil }
+                if let id, id > 0 { return CGDirectDisplayID(id) }   // 0 means "not connected"
+            }
+        }
         let all = allDisplays()
         return all.last(where: { CGDisplayIsBuiltin($0.id) == 0 })?.id ?? all.last?.id
     }
+
+    /// Marks the virtual screen in the picker so the user isn't guessing either.
+    static func virtualID() -> CGDirectDisplayID? { likelyVirtual() }
 
     private static let binary = "/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay"
 

@@ -59,6 +59,7 @@ final class Model: ObservableObject {
     @Published var addresses: [String] = []
     @Published var displays: [(id: CGDirectDisplayID, name: String, width: Int, height: Int)] = []
     @Published var chosenDisplay: CGDirectDisplayID = 0
+    @Published var virtualID: CGDirectDisplayID = 0
     @Published var creatingScreen = false
     @Published var autostart = UserDefaults.standard.bool(forKey: "autostart") {
         didSet { UserDefaults.standard.set(autostart, forKey: "autostart") }
@@ -74,8 +75,10 @@ final class Model: ObservableObject {
     func refresh() {
         displays = VirtualDisplay.allDisplays()
         addresses = VirtualDisplay.localAddresses()
+        let virtual = VirtualDisplay.likelyVirtual()
+        virtualID = virtual ?? 0
         if chosenDisplay == 0 || !displays.contains(where: { $0.id == chosenDisplay }) {
-            chosenDisplay = VirtualDisplay.likelyVirtual() ?? displays.first?.id ?? 0
+            chosenDisplay = virtual ?? displays.first?.id ?? 0
         }
     }
 
@@ -122,8 +125,10 @@ final class Model: ObservableObject {
 
         do {
             try server.start()
+            print("сервер слушает 8090")
         } catch {
             problem = "Порт 8090 занят: \(error.localizedDescription)"
+            print("сервер не поднялся: \(error)")
             status = "Готов"
             return
         }
@@ -134,6 +139,7 @@ final class Model: ObservableObject {
                 guard let self else { return }
                 if let error {
                     self.problem = error
+                    print("захват не пошёл: \(error)")
                     self.server.stop()
                     self.status = "Готов"
                 } else {
@@ -189,7 +195,9 @@ struct ContentView: View {
                 Text("Экран").frame(width: 70, alignment: .leading)
                 Picker("", selection: $model.chosenDisplay) {
                     ForEach(model.displays, id: \.id) { d in
-                        Text("\(d.name) · \(d.width)×\(d.height)").tag(d.id)
+                        Text(d.id == model.virtualID
+                             ? "Виртуальный · \(d.width)×\(d.height)"
+                             : "\(d.name) · \(d.width)×\(d.height)").tag(d.id)
                     }
                 }
                 .labelsHidden()

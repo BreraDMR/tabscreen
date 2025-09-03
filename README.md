@@ -1,7 +1,7 @@
 # TabScreen
 
-Use an Android tablet as a second display for your Mac — **~40 ms latency**, no
-subscription, no cables required.
+Use an Android tablet as a second display for your Mac — **~33 ms latency over Wi-Fi**,
+no subscription, no cables, no developer mode.
 
 spacedesk only ships a Windows server. Sidecar only talks to iPads. Duet wants a yearly
 fee. If you have a MacBook and an Android tablet sitting in a drawer, this is the missing
@@ -34,13 +34,14 @@ and a decoder from that era:
 
 | | |
 |---|---|
-| Latency to the tablet's screen | **37–41 ms** |
+| Latency to the tablet's screen | **33 ms** over Wi-Fi |
 | Frame rate | 45–60 fps |
 | Mac CPU | **2 %** of one core |
 | Bandwidth | ~5 Mbit/s |
 
-Over Wi-Fi it's 41 ms; over a USB cable 34 ms — close enough that the cable isn't worth
-the bother unless you're chasing the last few milliseconds (see `dev/` for that route).
+Wi-Fi and USB measure the same, so the cable isn't worth the bother — and skipping it
+means skipping developer mode and adb entirely. The USB route is still in `dev/` if you
+want it.
 
 ## Why it's fast
 
@@ -123,6 +124,9 @@ On the test tablet this halved the swap in use and cut the worst frame gap from 
   this space uses the same private interface.
 - **Unsigned app.** No paid Apple developer account, so the first launch needs
   right-click → Open.
+- **Both devices must be on the same Wi-Fi.** The Mac announces itself once a second on
+  the local network; guest networks that isolate clients will block that, and you'll have
+  to type the address shown in the app.
 - Requires macOS 13+ (ScreenCaptureKit) and Android 6+.
 
 ## License

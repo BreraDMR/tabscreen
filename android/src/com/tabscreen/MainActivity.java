@@ -135,7 +135,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private void lookForMac() {
-        discovery = new Discovery((address, name) -> ui.post(() -> {
+        discovery = new Discovery(this, (address, name) -> ui.post(() -> {
             setupHint.setText("Нашёл: " + name + " (" + address + ")\nПодключаюсь…");
             connectTo(address);
         }));
