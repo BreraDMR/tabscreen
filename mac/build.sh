@@ -9,7 +9,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 swiftc -O -parse-as-library \
   -o "$APP/Contents/MacOS/TabScreen" \
-  TabScreen/App.swift TabScreen/Capture.swift TabScreen/Server.swift TabScreen/VirtualDisplay.swift \
+  TabScreen/App.swift TabScreen/Strings.swift TabScreen/Capture.swift TabScreen/Server.swift TabScreen/VirtualDisplay.swift \
   -framework ScreenCaptureKit -framework VideoToolbox -framework CoreMedia \
   -framework SwiftUI -framework AppKit -framework Network
 

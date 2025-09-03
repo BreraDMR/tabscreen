@@ -9,6 +9,7 @@ import android.view.Surface;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.InputStream;
+import java.util.Locale;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -58,17 +59,17 @@ class StreamPlayer extends Thread {
         while (running) {
             Socket sock = null;
             try {
-                status.say("подключаюсь…");
+                status.say(L.CONNECTING);
                 sock = new Socket(host, PORT);
                 sock.setTcpNoDelay(true);
                 sock.setReceiveBufferSize(64 * 1024);   // a big buffer just hides lag in itself
                 out = sock.getOutputStream();
                 InputStream in = sock.getInputStream();
                 stream = in;
-                status.say("жду ключевой кадр…");
+                status.say(L.WAITING_KEY);
                 readStream(in);
             } catch (Exception e) {
-                status.say("нет связи: " + e.getMessage() + " (повтор)");
+                status.say(L.NO_LINK + e.getMessage() + L.RETRY);
             } finally {
                 out = null;
                 closeCodec();
@@ -88,7 +89,7 @@ class StreamPlayer extends Thread {
         byte[] nal = new byte[MAX_NAL];
         while (running) {
             int len = din.readInt();
-            if (len <= 0 || len > MAX_NAL) throw new Exception("битая длина кадра: " + len);
+            if (len <= 0 || len > MAX_NAL) throw new Exception(L.BAD_LENGTH + len);
             lastSeq = din.readInt();
             din.readFully(nal, 0, len);
             total += len + 4;
@@ -172,8 +173,8 @@ class StreamPlayer extends Thread {
                         + " мс, пауза в приёме " + shownRecv
                         + " мс, в декодере " + (fed - drawn)
                         + ", часы " + String.format("%07.3f", (now % 100000) / 1000.0));
-                status.say("идёт | " + lastFps + " к/с | рывок " + shownGap + " мс | в декодере "
-                        + (fed - drawn) + " | часы " + String.format("%07.3f", (now % 100000) / 1000.0));
+                status.say(L.RUNNING + " | " + lastFps + (Locale.getDefault().getLanguage().equals("ru") ? " к/с | рывок " : " fps | worst gap ") + shownGap + (Locale.getDefault().getLanguage().equals("ru") ? " мс | в декодере " : " ms | in decoder ")
+                        + (fed - drawn) + " | clock " + String.format("%07.3f", (now % 100000) / 1000.0));
             }
         }
     }
@@ -204,7 +205,7 @@ class StreamPlayer extends Thread {
         }
         started = 0;
         lastReport = 0;
-        status.say("декодер запущен");
+        status.say(L.DECODER_UP);
     }
 
     /** Tell the Mac this frame just hit the screen - it times the round trip itself,

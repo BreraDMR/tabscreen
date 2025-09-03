@@ -103,7 +103,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         setup.addView(title);
 
         setupHint = new TextView(this);
-        setupHint.setText("Ищу Mac в сети…\nЗапусти на нём TabScreen и нажми «Включить».");
+        setupHint.setText(L.LOOKING);
         setupHint.setTextColor(0xFFAAAAAA);
         setupHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         setupHint.setGravity(Gravity.CENTER);
@@ -111,7 +111,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         setup.addView(setupHint);
 
         hostField = new EditText(this);
-        hostField.setHint("или введи адрес вручную: 192.168.0.30");
+        hostField.setHint(L.MANUAL_HINT);
         hostField.setTextColor(Color.WHITE);
         hostField.setHintTextColor(0xFF666666);
         hostField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
@@ -119,7 +119,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         setup.addView(hostField);
 
         Button connect = new Button(this);
-        connect.setText("Подключиться");
+        connect.setText(L.CONNECT);
         connect.setOnClickListener(v -> {
             String h = hostField.getText().toString().trim();
             if (!h.isEmpty()) connectTo(h);
@@ -136,7 +136,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     private void lookForMac() {
         discovery = new Discovery(this, (address, name) -> ui.post(() -> {
-            setupHint.setText("Нашёл: " + name + " (" + address + ")\nПодключаюсь…");
+            setupHint.setText(L.FOUND + name + " (" + address + ")");
             connectTo(address);
         }));
         discovery.start();
@@ -150,7 +150,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         prefs().edit().putString(KEY_HOST, address).apply();
         StreamPlayer.host = address;
         showSetup(false);
-        status.setText("подключаюсь к " + address + "…");
+        status.setText(L.CONNECTING + address + "…");
         video.getHolder().addCallback(this);
         if (video.getHolder().getSurface() != null && video.getHolder().getSurface().isValid()) {
             surfaceCreated(video.getHolder());
