@@ -93,11 +93,7 @@ final class Model: ObservableObject {
     @Published var rotation = UserDefaults.standard.integer(forKey: "rotation") {
         didSet {
             UserDefaults.standard.set(rotation, forKey: "rotation")
-            // The picture is turned before it is encoded, so the capture has to be
-            // rebuilt at the new size. The server and the tablet don't notice.
-            guard running, rotation != oldValue else { return }
-            capture.stop()
-            startCapture()
+            server.setRotation(rotation)
         }
     }
 
@@ -189,6 +185,7 @@ final class Model: ObservableObject {
             }
         }
 
+        server.setRotation(rotation)
         do {
             try server.start()
             print("сервер слушает 8090")
@@ -199,13 +196,8 @@ final class Model: ObservableObject {
             return
         }
 
-        startCapture()
-    }
-
-    private func startCapture() {
-        guard let display = displays.first(where: { $0.id == chosenDisplay }) else { return }
         capture.start(displayID: display.id, width: display.width, height: display.height,
-                      fps: 60, bitrate: 5_000_000, rotation: rotation) { [weak self] error in
+                      fps: 60, bitrate: 5_000_000) { [weak self] error in
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
