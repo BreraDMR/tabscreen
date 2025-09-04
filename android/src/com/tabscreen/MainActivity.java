@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.SurfaceHolder;
@@ -36,6 +37,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private Discovery discovery;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private boolean statusVisible = true;
+    /** Comes from the Mac and only from the Mac - there is no way to change it here. */
+    private int rotation = 0;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -209,11 +212,31 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         player = new StreamPlayer(holder.getSurface(), new StreamPlayer.Status() {
             @Override public void say(String text) { ui.post(() -> status.setText(text)); }
             @Override public void streaming(boolean on) { ui.post(() -> keepAwake(on)); }
+            @Override public void rotate(int degrees) { ui.post(() -> applyRotation(degrees)); }
         });
         player.start();
     }
 
     @Override public void surfaceChanged(SurfaceHolder h, int f, int w, int hh) {}
+
+    /** Turn the picture the way the Mac asked. At 90 and 270 the view is laid out with
+     *  width and height swapped, so once it is rotated it lands back inside the screen. */
+    private void applyRotation(int degrees) {
+        rotation = degrees;
+        View parent = (View) video.getParent();
+        int w = parent.getWidth(), h = parent.getHeight();
+        if (w == 0 || h == 0) {          // layout hasn't happened yet, try again after it
+            parent.post(() -> applyRotation(degrees));
+            return;
+        }
+        boolean sideways = degrees == 90 || degrees == 270;
+        FrameLayout.LayoutParams lp =
+                new FrameLayout.LayoutParams(sideways ? h : w, sideways ? w : h);
+        lp.gravity = Gravity.CENTER;
+        video.setLayoutParams(lp);
+        video.setRotation(degrees);
+        Log.i("tabscreen", "поворот: " + degrees);
+    }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {

@@ -22,6 +22,8 @@ class StreamPlayer extends Thread {
         void say(String text);
         /** true while frames are arriving, false once the link is gone. */
         void streaming(boolean on);
+        /** How to turn the picture. The Mac decides this - the tablet only obeys. */
+        void rotate(int degrees);
     }
 
     // 127.0.0.1 means "over the cable" (adb reverse); anything else is a Mac on the network
@@ -46,6 +48,8 @@ class StreamPlayer extends Thread {
     private long retryDelay = 1000;
     private final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
     private static final byte[] START = {0, 0, 0, 1};
+    /** Sequence number the Mac uses for commands instead of video. */
+    private static final int COMMAND_SEQ = 0xFFFFFFFF;
     private InputStream stream;
     private long lastReport = 0;
 
@@ -101,6 +105,7 @@ class StreamPlayer extends Thread {
             if (len <= 0 || len > MAX_NAL) throw new Exception(L.BAD_LENGTH + len);
             lastSeq = din.readInt();
             din.readFully(nal, 0, len);
+            if (lastSeq == COMMAND_SEQ) { handleCommand(nal, len); continue; }
             total += len + 4;
             long recvNow = System.currentTimeMillis();
             if (lastRecvAt > 0) {
@@ -111,6 +116,17 @@ class StreamPlayer extends Thread {
             
             handleNal(nal, len);
         }
+    }
+
+    /** The Mac sends short text commands in place of a frame. Right now there is one:
+     *  "ROT 0|90|180|270". Nothing on this side ever sends one back. */
+    private void handleCommand(byte[] data, int len) {
+        String text = new String(data, 0, len, java.nio.charset.StandardCharsets.UTF_8).trim();
+        if (!text.startsWith("ROT ")) return;
+        try {
+            int deg = Integer.parseInt(text.substring(4).trim());
+            if (deg == 0 || deg == 90 || deg == 180 || deg == 270) status.rotate(deg);
+        } catch (NumberFormatException ignored) {}
     }
 
     private void handleNal(byte[] nal, int len) throws Exception {
