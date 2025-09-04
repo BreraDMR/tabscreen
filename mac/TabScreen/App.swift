@@ -102,7 +102,9 @@ final class Model: ObservableObject {
         let virtual = VirtualDisplay.likelyVirtual()
         virtualID = virtual ?? 0
         if chosenDisplay == 0 || !displays.contains(where: { $0.id == chosenDisplay }) {
-            chosenDisplay = virtual ?? displays.first?.id ?? 0
+            // Leave it at 0 rather than falling back to some other screen: sending the
+            // wrong picture is worse than sending none, and the user can pick by hand.
+            chosenDisplay = virtual ?? 0
         }
     }
 

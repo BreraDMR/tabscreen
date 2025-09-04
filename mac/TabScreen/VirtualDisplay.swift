@@ -51,7 +51,13 @@ enum VirtualDisplay {
                 else { id = nil }
                 if let id, id > 0 { return CGDirectDisplayID(id) }   // 0 means "not connected"
             }
+            // BetterDisplay answered and there is no virtual screen up yet. A screen that
+            // is still coming back reports id 0 - that means "wait", not "grab whatever
+            // else is plugged in". Guessing here is how the tablet ends up mirroring the
+            // external monitor instead of the virtual one.
+            return nil
         }
+        // BetterDisplay stayed silent - not installed, or not running. Only now guess.
         let all = allDisplays()
         return all.last(where: { CGDisplayIsBuiltin($0.id) == 0 })?.id ?? all.last?.id
     }
