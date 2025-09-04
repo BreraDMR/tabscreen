@@ -3,6 +3,7 @@
 // The one setting that matters here is EnableLowLatencyRateControl - without it the
 // tablet's decoder buffers about nine frames and the whole thing feels laggy.
 
+import CoreImage
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
@@ -24,6 +25,14 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
     private var fps = 60
     private var bitrate = 5_000_000
 
+    /// Turning the picture here, before the encoder, so any client shows it the right way
+    /// up without knowing anything about rotation.
+    private var rotation = 0
+    private var outWidth: Int { rotation == 90 || rotation == 270 ? height : width }
+    private var outHeight: Int { rotation == 90 || rotation == 270 ? width : height }
+    private let ciContext = CIContext(options: [.cacheIntermediates: false])
+    private var rotatePool: CVPixelBufferPool?
+
     private var lastFrame: CVImageBuffer?
     private var lastFrameAt = CFAbsoluteTimeGetCurrent()
     private var pts = CMTime.zero
@@ -34,11 +43,13 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
     // MARK: - lifecycle
 
     func start(displayID: CGDirectDisplayID, width: Int, height: Int,
-               fps: Int, bitrate: Int, done: @escaping (String?) -> Void) {
+               fps: Int, bitrate: Int, rotation: Int = 0, done: @escaping (String?) -> Void) {
         self.width = width
         self.height = height
         self.fps = fps
         self.bitrate = bitrate
+        self.rotation = rotation
+        makeRotatePool()
 
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { content, error in
             guard let content, let display = content.displays.first(where: { $0.displayID == displayID })
@@ -96,7 +107,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
         var s: VTCompressionSession?
         let status = VTCompressionSessionCreate(
             allocator: kCFAllocatorDefault,
-            width: Int32(width), height: Int32(height),
+            width: Int32(outWidth), height: Int32(outHeight),
             codecType: kCMVideoCodecType_H264,
             encoderSpecification: [
                 // The whole reason this project feels responsive.
@@ -120,6 +131,38 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
         set(kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, NSNumber(value: 0.5))
         VTCompressionSessionPrepareToEncodeFrames(session)
         self.session = session
+    }
+
+    /// A pool of buffers to rotate into - making one per frame would be the expensive
+    /// part, not the rotation itself.
+    private func makeRotatePool() {
+        rotatePool = nil
+        guard rotation != 0 else { return }
+        let attrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferWidthKey as String: outWidth,
+            kCVPixelBufferHeightKey as String: outHeight,
+            kCVPixelBufferMetalCompatibilityKey as String: true
+        ]
+        var pool: CVPixelBufferPool?
+        CVPixelBufferPoolCreate(kCFAllocatorDefault,
+                                [kCVPixelBufferPoolMinimumBufferCountKey as String: 4] as CFDictionary,
+                                attrs as CFDictionary, &pool)
+        rotatePool = pool
+    }
+
+    private func rotate(_ source: CVImageBuffer) -> CVImageBuffer {
+        guard rotation != 0, let pool = rotatePool else { return source }
+        var target: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &target) == kCVReturnSuccess,
+              let target else { return source }
+        var image = CIImage(cvImageBuffer: source)
+        image = image.transformed(by: CGAffineTransform(rotationAngle: -CGFloat(rotation) * .pi / 180))
+        // rotation leaves the image off in negative coordinates - slide it back to 0,0
+        image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x,
+                                                        y: -image.extent.origin.y))
+        ciContext.render(image, to: target)
+        return target
     }
 
     /// ScreenCaptureKit only sends a frame when the picture changes, but a decoder's
@@ -152,7 +195,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
         lock.unlock()
 
         VTCompressionSessionEncodeFrame(
-            session, imageBuffer: frame, presentationTimeStamp: stamp,
+            session, imageBuffer: rotate(frame), presentationTimeStamp: stamp,
             duration: .invalid, frameProperties: nil, infoFlagsOut: nil) { [weak self] status, _, sample in
                 guard status == noErr, let sample, CMSampleBufferDataIsReady(sample) else { return }
                 self?.emit(sample)
