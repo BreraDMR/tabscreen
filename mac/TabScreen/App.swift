@@ -96,6 +96,9 @@ final class Model: ObservableObject {
     /// can drop on its own and we want to bring it back without them clicking anything.
     private var wantsRunning = false
     private var retryDelay = 2.0
+    /// Set only when we switched the virtual screen on ourselves - then it's ours to
+    /// switch off again. A screen the user had up already stays up.
+    private var ourScreenTag: Int?
 
     init() {
         refresh()
@@ -131,12 +134,27 @@ final class Model: ObservableObject {
 
     func start() {
         guard let display = displays.first(where: { $0.id == chosenDisplay }) else {
-            // No screen yet - BetterDisplay may still be bringing the virtual one back.
-            // Wait for it instead of giving up; "Stop" cancels the waiting.
+            // No screen to capture. BetterDisplay usually still has the virtual one,
+            // just switched off - turn it on rather than making the user do it.
             wantsRunning = true
-            problem = L.screenGone
-            status = L.reconnecting
-            scheduleRecovery()
+            problem = nil
+            status = L.wakingScreen
+            DispatchQueue.global().async { [weak self] in
+                let tag = VirtualDisplay.disconnectedVirtualTag()
+                if let tag { VirtualDisplay.setConnected(tag: tag, on: true) }
+                DispatchQueue.main.async {
+                    guard let self, self.wantsRunning else { return }
+                    if let tag { self.ourScreenTag = tag }
+                    self.refresh()
+                    if self.displays.contains(where: { $0.id == self.chosenDisplay }) {
+                        self.start()
+                    } else {
+                        self.problem = L.screenGone
+                        self.status = L.reconnecting
+                        self.scheduleRecovery()
+                    }
+                }
+            }
             return
         }
         problem = nil
@@ -231,6 +249,12 @@ final class Model: ObservableObject {
         clients = 0
         latency = 0
         fps = 0
+        // Put the screen back the way we found it: nobody needs a virtual display
+        // hanging around collecting windows once the tablet is done.
+        if let tag = ourScreenTag {
+            ourScreenTag = nil
+            DispatchQueue.global().async { VirtualDisplay.setConnected(tag: tag, on: false) }
+        }
     }
 }
 

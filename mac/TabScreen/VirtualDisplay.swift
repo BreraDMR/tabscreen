@@ -65,6 +65,39 @@ enum VirtualDisplay {
     /// Marks the virtual screen in the picker so the user isn't guessing either.
     static func virtualID() -> CGDirectDisplayID? { likelyVirtual() }
 
+    /// A virtual screen BetterDisplay already knows about but isn't showing to macOS.
+    /// That's the one to switch on instead of making yet another screen every time.
+    static func disconnectedVirtualTag() -> Int? {
+        let raw = run(["get", "-identifiers"], timeout: 4)
+        guard let data = ("[" + raw + "]").data(using: .utf8),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+        for item in items where (item["deviceType"] as? String) == "VirtualScreen" {
+            let id: Int?
+            if let n = item["displayID"] as? Int { id = n }
+            else if let str = item["displayID"] as? String { id = Int(str) }
+            else { id = nil }
+            guard id == nil || id == 0 else { continue }        // already connected
+            if let tag = item["tagID"] as? Int { return tag }
+            if let tag = item["tagID"] as? String, let n = Int(tag) { return n }
+        }
+        return nil
+    }
+
+    /// Switch a virtual screen on or off. Returns once macOS has caught up, or after
+    /// about five seconds - BetterDisplay is not always instant about it.
+    @discardableResult
+    static func setConnected(tag: Int, on: Bool) -> Bool {
+        run(["set", "-tagID=\(tag)", "-connected=\(on ? "on" : "off")"], timeout: 8)
+        for _ in 0..<10 {
+            let up = likelyVirtual() != nil
+            if up == on { return true }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        return false
+    }
+
     private static let binary = "/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay"
 
     /// Run BetterDisplay's own command line. Its URL scheme can be switched off in its
