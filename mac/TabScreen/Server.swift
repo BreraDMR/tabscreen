@@ -49,6 +49,9 @@ final class Server: @unchecked Sendable {
     }
 
     func start() throws {
+        // Already listening? Leave it alone - restarting the capture shouldn't drop the
+        // tablet's connection, and rebinding the port would look like "port is busy".
+        if listener != nil { return }
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
         if let tcp = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
