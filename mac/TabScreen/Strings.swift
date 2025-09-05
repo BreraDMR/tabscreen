@@ -62,6 +62,10 @@ enum L {
     }
     static var noScreenChosen: String { t("No screen selected", "Не выбран экран") }
     static var portBusy: String { t("Port 8090 is busy", "Порт 8090 занят") }
+    static var grantAccess: String {
+        t("Screen recording is off for this app. Allow it in System Settings, then quit and open TabScreen again.",
+          "Запись экрана для приложения выключена. Разреши её в Системных настройках, потом закрой и открой TabScreen заново.")
+    }
     static var noScreenAccess: String { t("no screen access", "нет доступа к экрану") }
     static var displayNotFound: String { t("display not found", "дисплей не найден") }
     static var captureFailed: String { t("couldn't start capture", "не удалось начать захват") }
