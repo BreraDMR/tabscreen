@@ -22,6 +22,7 @@ struct TabScreenApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = Model()
+    private var wasRunningBeforeSleep = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Keep the window on the Mac's own screen - it has a habit of opening on the
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 y: main.frame.midY - frame.height / 2))
         }
         NSApplication.shared.activate(ignoringOtherApps: true)
+        watchForSleep()
 
         if CommandLine.arguments.contains("--create-screen") {
             model.createVirtualScreen()
@@ -41,6 +43,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--start")
             || UserDefaults.standard.bool(forKey: "autostart") {
             model.start()
+        }
+    }
+
+    /// Stop cleanly when the Mac sleeps: the tablet then knows the link is gone and can
+    /// let its own screen go dark, instead of sitting awake all night retrying.
+    private func watchForSleep() {
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(forName: NSWorkspace.willSleepNotification,
+                           object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.model.running else { return }
+            self.wasRunningBeforeSleep = true
+            self.model.stop()
+        }
+        center.addObserver(forName: NSWorkspace.didWakeNotification,
+                           object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.wasRunningBeforeSleep else { return }
+            self.wasRunningBeforeSleep = false
+            // displays take a moment to come back after waking
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                self.model.refresh()
+                self.model.start()
+            }
         }
     }
 

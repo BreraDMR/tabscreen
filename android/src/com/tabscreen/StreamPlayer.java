@@ -18,7 +18,11 @@ import java.nio.ByteBuffer;
  *  Everything runs on its own thread; the UI only gets status text. */
 class StreamPlayer extends Thread {
 
-    interface Status { void say(String text); }
+    interface Status {
+        void say(String text);
+        /** true while frames are arriving, false once the link is gone. */
+        void streaming(boolean on);
+    }
 
     // 127.0.0.1 means "over the cable" (adb reverse); anything else is a Mac on the network
     static String host = "127.0.0.1";
@@ -39,6 +43,7 @@ class StreamPlayer extends Thread {
     private int lastSeq = 0;
     private BufferedInputStream buffered;
     private volatile OutputStream out;
+    private long retryDelay = 1000;
     private final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
     private static final byte[] START = {0, 0, 0, 1};
     private InputStream stream;
@@ -66,17 +71,21 @@ class StreamPlayer extends Thread {
                 out = sock.getOutputStream();
                 InputStream in = sock.getInputStream();
                 stream = in;
+                retryDelay = 1000;                     // connected, start over
                 status.say(L.WAITING_KEY);
                 readStream(in);
             } catch (Exception e) {
                 status.say(L.NO_LINK + e.getMessage() + L.RETRY);
             } finally {
                 out = null;
+                status.streaming(false);
                 closeCodec();
                 try { if (sock != null) sock.close(); } catch (Exception ignored) {}
             }
             if (running) {
-                try { Thread.sleep(700); } catch (InterruptedException e) { return; }
+                // The Mac may be asleep for hours - back off instead of hammering it.
+                try { Thread.sleep(retryDelay); } catch (InterruptedException e) { return; }
+                retryDelay = Math.min(retryDelay * 2, 30000);
             }
         }
     }
@@ -194,6 +203,7 @@ class StreamPlayer extends Thread {
         codec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
         codec.configure(fmt, surface, null, 0);
         codec.start();
+        status.streaming(true);
         Log.i("tabscreen", "декодер: " + codec.getName());
         try {
             android.os.Bundle p = new android.os.Bundle();

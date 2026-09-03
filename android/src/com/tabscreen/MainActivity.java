@@ -40,8 +40,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
@@ -83,6 +81,25 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             status.setVisibility(View.GONE);
         }, 25000);
     }
+
+    /** Hold the screen on only while a picture is actually arriving. Otherwise a
+     *  sleeping Mac leaves the tablet awake all night. */
+    private void keepAwake(boolean on) {
+        if (on) {
+            ui.removeCallbacks(letItSleep);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            // give it a few seconds in case this is a blip, not the Mac going to sleep
+            ui.removeCallbacks(letItSleep);
+            ui.postDelayed(letItSleep, 20000);
+        }
+    }
+
+    private final Runnable letItSleep = new Runnable() {
+        @Override public void run() {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    };
 
     private SharedPreferences prefs() {
         return getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -189,7 +206,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         if (player != null) return;
-        player = new StreamPlayer(holder.getSurface(), text -> ui.post(() -> status.setText(text)));
+        player = new StreamPlayer(holder.getSurface(), new StreamPlayer.Status() {
+            @Override public void say(String text) { ui.post(() -> status.setText(text)); }
+            @Override public void streaming(boolean on) { ui.post(() -> keepAwake(on)); }
+        });
         player.start();
     }
 
