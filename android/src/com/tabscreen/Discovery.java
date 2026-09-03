@@ -1,5 +1,7 @@
 package com.tabscreen;
 
+import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 
 import java.net.DatagramPacket;
@@ -16,10 +18,13 @@ class Discovery extends Thread {
 
     private static final int PORT = 8089;
     private final Found callback;
+    private final Context context;
     private volatile boolean running = true;
     private DatagramSocket socket;
+    private WifiManager.MulticastLock lock;
 
-    Discovery(Found callback) {
+    Discovery(Context context, Found callback) {
+        this.context = context;
         this.callback = callback;
     }
 
@@ -32,6 +37,14 @@ class Discovery extends Thread {
     @Override
     public void run() {
         try {
+            // Wi-Fi silently drops broadcast packets unless we hold this lock
+            WifiManager wifi = (WifiManager) context.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null) {
+                lock = wifi.createMulticastLock("tabscreen");
+                lock.setReferenceCounted(true);
+                lock.acquire();
+            }
             socket = new DatagramSocket(null);
             socket.setReuseAddress(true);
             socket.setBroadcast(true);
@@ -44,10 +57,13 @@ class Discovery extends Thread {
                 if (!text.startsWith("TABSCREEN")) continue;
                 InetAddress from = packet.getAddress();
                 String name = text.length() > 10 ? text.substring(10).trim() : "Mac";
+                Log.i("tabscreen", "нашёл мак: " + from.getHostAddress());
                 callback.mac(from.getHostAddress(), name);
             }
         } catch (Exception e) {
             if (running) Log.i("tabscreen", "поиск прекращён: " + e);
+        } finally {
+            if (lock != null && lock.isHeld()) lock.release();
         }
     }
 }
