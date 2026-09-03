@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Model: ObservableObject {
     @Published var running = false
-    @Published var status = "Готов"
+    @Published var status = L.appReady
     @Published var problem: String?
     @Published var clients = 0
     @Published var latency = 0
@@ -84,27 +84,27 @@ final class Model: ObservableObject {
 
     func createVirtualScreen() {
         guard VirtualDisplay.betterDisplayInstalled else {
-            problem = "Сначала установи BetterDisplay — без него виртуальный экран не создать"
+            problem = L.noBetterDisplay
             return
         }
         creatingScreen = true
-        status = "Создаю виртуальный экран…"
+        status = L.creating
         VirtualDisplay.create(width: 1280, height: 800) { [weak self] error in
             guard let self else { return }
             self.creatingScreen = false
             self.problem = error
-            self.status = error == nil ? "Виртуальный экран готов" : "Готов"
+            self.status = error == nil ? L.created : L.appReady
             self.refresh()
         }
     }
 
     func start() {
         guard let display = displays.first(where: { $0.id == chosenDisplay }) else {
-            problem = "Не выбран экран"
+            problem = L.noScreenChosen
             return
         }
         problem = nil
-        status = "Запускаю…"
+        status = L.starting
 
         server.onStats = { [weak self] stats in
             Task { @MainActor in
@@ -127,9 +127,9 @@ final class Model: ObservableObject {
             try server.start()
             print("сервер слушает 8090")
         } catch {
-            problem = "Порт 8090 занят: \(error.localizedDescription)"
+            problem = "\(L.portBusy): \(error.localizedDescription)"
             print("сервер не поднялся: \(error)")
-            status = "Готов"
+            status = L.appReady
             return
         }
 
@@ -141,10 +141,10 @@ final class Model: ObservableObject {
                     self.problem = error
                     print("захват не пошёл: \(error)")
                     self.server.stop()
-                    self.status = "Готов"
+                    self.status = L.appReady
                 } else {
                     self.running = true
-                    self.status = "Работает"
+                    self.status = L.appRunning
                 }
             }
         }
@@ -154,7 +154,7 @@ final class Model: ObservableObject {
         capture.stop()
         server.stop()
         running = false
-        status = "Готов"
+        status = L.appReady
         clients = 0
         latency = 0
         fps = 0
@@ -175,7 +175,7 @@ struct ContentView: View {
                     Text(model.status).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(model.running ? "Остановить" : "Включить") {
+                Button(model.running ? L.turnOff : L.turnOn) {
                     model.running ? model.stop() : model.start()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -192,11 +192,11 @@ struct ContentView: View {
             Divider()
 
             HStack {
-                Text("Экран").frame(width: 70, alignment: .leading)
+                Text(L.screen).frame(width: 70, alignment: .leading)
                 Picker("", selection: $model.chosenDisplay) {
                     ForEach(model.displays, id: \.id) { d in
                         Text(d.id == model.virtualID
-                             ? "Виртуальный · \(d.width)×\(d.height)"
+                             ? "\(L.virtual) · \(d.width)×\(d.height)"
                              : "\(d.name) · \(d.width)×\(d.height)").tag(d.id)
                     }
                 }
@@ -207,19 +207,19 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Обновить список")
+                .help(L.refresh)
             }
 
             if !model.running {
                 Button {
                     model.createVirtualScreen()
                 } label: {
-                    Label("Создать виртуальный экран", systemImage: "plus.rectangle.on.rectangle")
+                    Label(L.createScreen, systemImage: "plus.rectangle.on.rectangle")
                 }
                 .disabled(model.creatingScreen)
-                .help("Нужен BetterDisplay — он создаёт экран, которого нет физически")
+                .help(L.createScreenHelp)
 
-                Toggle("Включать сразу при запуске", isOn: $model.autostart)
+                Toggle(L.startOnLaunch, isOn: $model.autostart)
                     .font(.callout)
             }
 
@@ -227,11 +227,11 @@ struct ContentView: View {
                 Divider()
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Подключись с планшета:").font(.callout)
+                        Text(L.connectFrom).font(.callout)
                         ForEach(model.addresses, id: \.self) { ip in
                             Text(ip).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                         }
-                        Text("или просто нажми «Найти Mac» в приложении на планшете")
+                        Text(L.orFind)
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -243,9 +243,9 @@ struct ContentView: View {
 
                 Divider()
                 HStack(spacing: 18) {
-                    stat("Планшетов", "\(model.clients)")
-                    stat("Задержка", model.latency > 0 ? "\(model.latency) мс" : "—")
-                    stat("Кадров/с", model.fps > 0 ? "\(model.fps)" : "—")
+                    stat(L.tablets, "\(model.clients)")
+                    stat(L.latency, model.latency > 0 ? "\(model.latency) \(L.ms)" : "—")
+                    stat(L.fps, model.fps > 0 ? "\(model.fps)" : "—")
                 }
             }
         }

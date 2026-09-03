@@ -1,133 +1,108 @@
 # TabScreen
 
-Use an Android tablet as a second display for your Mac — **~33 ms latency over Wi-Fi**,
-no subscription, no cables, no developer mode.
+**Turn an old Android tablet into a second display for your Mac.**
+About 33 ms of lag over Wi-Fi. No subscription, no cables, no developer mode.
+
+<img src="docs/app.png" width="420" alt="TabScreen on the Mac">
 
 spacedesk only ships a Windows server. Sidecar only talks to iPads. Duet wants a yearly
-fee. If you have a MacBook and an Android tablet sitting in a drawer, this is the missing
-piece.
+fee. If you have a MacBook and an Android tablet gathering dust in a drawer, this is the
+missing piece.
 
 ## Install
 
-**Two downloads, no terminal.** Get them from the
-[Releases](https://github.com/BreraDMR/tabscreen/releases) page.
+Two downloads from the [Releases](https://github.com/BreraDMR/tabscreen/releases) page.
+No terminal, nothing to build.
 
-1. **Install [BetterDisplay](https://github.com/waydabber/BetterDisplay)** (free) on the
-   Mac. It creates the virtual screen — macOS has no public API for that, so no app can
-   replace it.
-2. **Unpack `TabScreen-mac.zip`**, drag `TabScreen.app` to Applications, then
-   **right-click → Open** (the app isn't signed with a paid Apple certificate, so a plain
-   double-click gets blocked the first time). Allow screen recording when asked.
-3. In TabScreen press **Create virtual screen** — it sets one up through BetterDisplay,
-   1280×800, ready to use.
-4. **On the tablet:** open `tabscreen-android.apk` — download it straight to the tablet,
-   Android will ask to allow installs from this source. No developer mode, no adb.
-5. Press **Turn on** on the Mac. The tablet finds it on the network by itself; the app on
-   the Mac also shows its address and a QR code if you'd rather type it in.
+**1. Install [BetterDisplay](https://github.com/waydabber/BetterDisplay)** on the Mac —
+the free version is enough. It creates the virtual screen; macOS has no public API for
+that, so no app can do it alone.
 
-That's it. Drag a window onto the new screen and it shows up on the tablet.
+**2. Unpack `TabScreen-mac.zip`** and drag `TabScreen.app` to Applications.
+Open it with **right-click → Open** the first time — the app isn't signed with a paid
+Apple certificate, so a plain double-click gets blocked. Allow screen recording when
+macOS asks.
 
-## What you get
+**3. Press "Create virtual screen."** TabScreen sets one up through BetterDisplay,
+1280×800, ready to go.
 
-Measured on a MacBook Air M1 and a **Samsung Galaxy Tab A 10.1 from 2019** — 2 GB of RAM
-and a decoder from that era:
+**4. On the tablet, open `tabscreen-android.apk`** — download it straight to the tablet
+with its browser. Android will ask to allow installing from this source. That's the whole
+setup on that side: no developer mode, no adb, no USB.
+
+**5. Press "Turn on."** The tablet finds the Mac on the network by itself. If your network
+blocks that, the app shows its address and a QR code — type it in on the tablet.
+
+Now drag any window onto the new screen and it appears on the tablet.
+
+## What to expect
+
+Measured on a MacBook Air M1 and a **Samsung Galaxy Tab A 10.1 from 2019** — 2 GB of RAM,
+a decoder from that era. Newer hardware does better; nearly all the remaining delay is the
+tablet decoding the picture.
 
 | | |
 |---|---|
-| Latency to the tablet's screen | **33 ms** over Wi-Fi |
+| Lag | **31–36 ms** |
 | Frame rate | 45–60 fps |
-| Mac CPU | **2 %** of one core |
-| Bandwidth | ~5 Mbit/s |
+| Mac CPU | 2 % of one core |
+| Network | ~5 Mbit/s |
 
-Wi-Fi and USB measure the same, so the cable isn't worth the bother — and skipping it
-means skipping developer mode and adb entirely. The USB route is still in `dev/` if you
-want it.
+For comparison: the obvious way to build this — screen recording piped into a browser —
+gives 200–500 ms and feels awful. [How it got to 33 ms](docs/HOW-IT-WORKS.md).
 
-## Why it's fast
+## When something goes wrong
 
-The obvious build — ffmpeg grabbing the screen, a browser showing the stream — lands at
-**200–500 ms** and feels terrible. Getting to 40 ms came down to four things, and the last
-one mattered more than the other three combined:
+**"The app won't open, macOS says it's damaged or from an unidentified developer."**
+Right-click the app → Open → Open. This is macOS's standard treatment of apps without a
+paid certificate, not a sign of anything wrong.
 
-| Fix | Effect |
-|---|---|
-| Read the encoder's output as it arrives, not in fixed-size blocks | a blocking read waits for its buffer to fill: 500 ms bursts became a 39 ms stream |
-| Frame each NAL as `[length][seq][data]` | the tablet's decode loop couldn't scan a byte stream for start codes at 60 fps |
-| Keep every queue short — 5 frames — and skip to the next keyframe on overflow | a 24-frame queue *is* 400 ms of latency, sitting there quietly |
-| **`EnableLowLatencyRateControl` on the VideoToolbox encoder** | **the tablet's decoder stopped hoarding frames: 9 in flight → 1, latency 150 ms → 37 ms** |
+**The tablet says "Looking for a Mac" forever.** Both devices need to be on the same
+Wi-Fi, and guest networks usually block devices from seeing each other. Type the address
+shown in the TabScreen window instead.
 
-Two counter-intuitive findings worth knowing if you build something similar:
+**The tablet shows a black screen.** The Mac is capturing the wrong display — check the
+"Screen" dropdown, the virtual one is labelled *Virtual*. If there's no virtual screen in
+the list, press "Create virtual screen".
 
-- **Lower frame rate means *higher* latency.** A decoder's pipeline is measured in frames,
-  not milliseconds — at 30 fps each frame in it costs twice as long. Dropping 60 → 30 fps
-  took latency from 131 ms to 440 ms.
-- **Never trust the tablet's clock** to measure latency. They drift by hundreds of
-  milliseconds; one measurement here came out negative. TabScreen stamps frames and has
-  the tablet report back, so everything is timed on the Mac's own clock.
+**"BetterDisplay isn't responding."** Start BetterDisplay by hand and wait until its icon
+appears in the menu bar, then try again.
 
-## How it works
+**The picture is smooth but lags behind.** Something else is eating your Wi-Fi, or the
+tablet is far from the router. A USB cable is an option for the stubborn cases — see
+[dev/](dev/README.md) — but it needs developer mode on the tablet and buys only a few
+milliseconds.
 
-```
-   Mac                                              Tablet
-┌──────────────────────────────┐             ┌────────────────────┐
-│ BetterDisplay                │             │                    │
-│   └── virtual display        │             │  TabScreen app     │
-│         │                    │  Wi-Fi/USB  │    │               │
-│ TabScreen.app                │────────────►│    ├─ MediaCodec   │
-│   ScreenCaptureKit           │  ~5 Mbit/s  │    └─ SurfaceView  │
-│   VideoToolbox H.264         │             │                    │
-│   TCP server + discovery     │             └────────────────────┘
-└──────────────────────────────┘
-```
+**The tablet itself is sluggish, not the picture.** Old Android tablets spend their RAM on
+preinstalled software. `tools/debloat.sh` turns off the usual suspects — nothing is
+deleted, `tools/rebloat.sh` puts it all back. That one does need adb.
 
-Capture stops when nobody is watching, so the Mac idles at 0 % with the tablet asleep.
+## Building it yourself
 
-## Building from source
-
-Only needed if you want to change something.
+Only if you want to change something.
 
 ```bash
 git clone https://github.com/BreraDMR/tabscreen
 cd tabscreen
-./setup.sh     # builds the Mac app, downloads a JDK + Android SDK into ./tools, builds the APK
+./setup.sh     # builds the Mac app, fetches a JDK + Android SDK into ./tools, builds the APK
 ```
 
-| Path | What it is |
-|---|---|
-| `mac/TabScreen/Capture.swift` | ScreenCaptureKit → VideoToolbox |
-| `mac/TabScreen/Server.swift` | TCP fan-out, framing, latency measurement, discovery beacon |
-| `mac/TabScreen/VirtualDisplay.swift` | drives BetterDisplay through its URL scheme |
-| `mac/TabScreen/App.swift` | the window |
-| `android/` | the tablet client — socket → MediaCodec → SurfaceView |
-| `android/build.sh` | builds the APK with plain SDK tools: no Gradle, no Android Studio |
-| `tools/debloat.sh` | optional, quiets down a Samsung tablet |
-| `dev/` | earlier Python/ffmpeg iterations, kept for debugging and comparison |
+Nothing is installed system-wide and no password is asked for. The Android client is
+~450 lines of Java, the Mac app ~700 lines of Swift, and the APK comes out at 20 KB.
 
-The Android client is ~450 lines of Java and the APK is 17 KB.
+- [How it works and why it's fast](docs/HOW-IT-WORKS.md) — the architecture, the four
+  fixes that mattered, and the measurements
+- [KNOWN-GOOD.md](KNOWN-GOOD.md) — every setting of the configuration that produced these
+  numbers, plus what was tried and made things worse
+- [dev/](dev/README.md) — earlier Python and ffmpeg iterations, kept for debugging
 
-## If the tablet itself is sluggish
+## Limits
 
-An old Samsung spends its RAM on things you never asked for: on the test device 348
-packages were installed and 570 MB sat in swap permanently. `tools/debloat.sh` disables
-the usual suspects for the current user — nothing is deleted, `tools/rebloat.sh` puts it
-all back, and a factory reset undoes it anyway. It needs adb, unlike the app itself.
-
-On the test tablet this halved the swap in use and cut the worst frame gap from 52 ms to
-28 ms.
-
-## Known limits
-
-- **Touch input isn't wired up.** There's a working implementation in `dev/input.py`
-  (touch → `CGEvent`), but it's off: with any noticeable latency a finger-driven cursor
-  feels wrong.
-- **The virtual display needs BetterDisplay.** No public macOS API exists; every tool in
-  this space uses the same private interface.
-- **Unsigned app.** No paid Apple developer account, so the first launch needs
-  right-click → Open.
-- **Both devices must be on the same Wi-Fi.** The Mac announces itself once a second on
-  the local network; guest networks that isolate clients will block that, and you'll have
-  to type the address shown in the app.
-- Requires macOS 13+ (ScreenCaptureKit) and Android 6+.
+- **Touch isn't wired up.** There's a working implementation in `dev/input.py`, but at any
+  noticeable lag a finger-driven cursor feels wrong.
+- **BetterDisplay is required** for the virtual screen. No way around it on macOS.
+- **The app is unsigned** — first launch needs right-click → Open.
+- macOS 13+ and Android 8+.
 
 ## License
 

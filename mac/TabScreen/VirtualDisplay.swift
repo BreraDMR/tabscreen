@@ -34,7 +34,7 @@ enum VirtualDisplay {
             let w = mode.map { $0.pixelWidth } ?? Int(CGDisplayPixelsWide(id))
             let h = mode.map { $0.pixelHeight } ?? Int(CGDisplayPixelsHigh(id))
             let builtin = CGDisplayIsBuiltin(id) != 0
-            return (id, builtin ? "Встроенный экран" : "Дисплей \(id)", w, h)
+            return (id, builtin ? L.builtIn : "\(L.display) \(id)", w, h)
         }
     }
 
@@ -105,7 +105,7 @@ enum VirtualDisplay {
     /// calls take seconds.
     static func create(width: Int, height: Int, completion: @escaping (String?) -> Void) {
         guard betterDisplayInstalled else {
-            completion("BetterDisplay не установлен — без него виртуальный экран не создать")
+            completion(L.noBetterDisplay)
             return
         }
         if !betterDisplayRunning {
@@ -119,7 +119,7 @@ enum VirtualDisplay {
                 if !ready { Thread.sleep(forTimeInterval: 0.5) }
             }
             guard ready else {
-                DispatchQueue.main.async { completion("BetterDisplay не отвечает — запусти его вручную") }
+                DispatchQueue.main.async { completion(L.betterDisplaySilent) }
                 return
             }
 
@@ -128,7 +128,7 @@ enum VirtualDisplay {
             Thread.sleep(forTimeInterval: 1.0)
 
             guard let tag = virtualTags().first(where: { !before.contains($0) }) ?? virtualTags().last else {
-                DispatchQueue.main.async { completion("BetterDisplay не создал экран") }
+                DispatchQueue.main.async { completion(L.notCreated) }
                 return
             }
 
@@ -143,7 +143,7 @@ enum VirtualDisplay {
 
             let connected = allDisplays().contains { CGDisplayIsBuiltin($0.id) == 0 && $0.width == width }
             DispatchQueue.main.async {
-                completion(connected ? nil : "Экран создан, но не подключился — включи его в BetterDisplay")
+                completion(connected ? nil : L.notConnected)
             }
         }
     }

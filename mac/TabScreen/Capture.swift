@@ -43,7 +43,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { content, error in
             guard let content, let display = content.displays.first(where: { $0.displayID == displayID })
                     ?? content.displays.last else {
-                done("нет доступа к экрану: \(error?.localizedDescription ?? "дисплей не найден")")
+                done("\(L.noScreenAccess): \(error?.localizedDescription ?? L.displayNotFound)")
                 return
             }
             do {
@@ -65,14 +65,14 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
                 stream.startCapture { err in
                     if let err {
                         self.stream = nil
-                        done("не удалось начать захват: \(err.localizedDescription)")
+                        done("\(L.captureFailed): \(err.localizedDescription)")
                     } else {
                         self.startTicker()
                         done(nil)
                     }
                 }
             } catch {
-                done("не удалось настроить захват: \(error.localizedDescription)")
+                done("\(L.captureSetupFailed): \(error.localizedDescription)")
             }
         }
     }
@@ -106,7 +106,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
             outputCallback: nil, refcon: nil, compressionSessionOut: &s)
         guard status == noErr, let session = s else {
             throw NSError(domain: "TabScreen", code: Int(status),
-                          userInfo: [NSLocalizedDescriptionKey: "кодировщик не создался (\(status))"])
+                          userInfo: [NSLocalizedDescriptionKey: "\(L.encoderFailed) (\(status))"])
         }
         func set(_ key: CFString, _ value: CFTypeRef) {
             VTSessionSetProperty(session, key: key, value: value)
@@ -217,7 +217,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Send
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        onError?("захват остановлен: \(error.localizedDescription)")
+        onError?("\(L.captureStopped): \(error.localizedDescription)")
         self.stream = nil
     }
 }
