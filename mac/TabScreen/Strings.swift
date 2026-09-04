@@ -11,6 +11,8 @@ enum L {
     static var appReady: String { t("Ready", "Готов") }
     static var appRunning: String { t("Running", "Работает") }
     static var starting: String { t("Starting…", "Запускаю…") }
+    static var wakingScreen: String { t("Switching the virtual screen on…",
+                                       "Включаю виртуальный экран…") }
     static var reconnecting: String { t("Screen went away, picking it up again…",
                                         "Экран пропал, цепляюсь заново…") }
     static var screenGone: String {
