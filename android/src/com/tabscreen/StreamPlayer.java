@@ -143,7 +143,17 @@ class StreamPlayer extends Thread {
         nalCount++;
         if (type != 1) Log.i("tabscreen", "NAL тип " + type + " длина " + len);
         if (type == 7) {
-            sps = copy(nal, len);
+            byte[] fresh = copy(nal, len);
+            // A different SPS means the picture changed shape - rotated, or the screen
+            // resolution changed. This decoder won't follow that on the fly, so build a
+            // new one. Without this the picture turns to garbage.
+            if (sps != null && !java.util.Arrays.equals(sps, fresh)) {
+                Log.i("tabscreen", "новый SPS - пересобираю декодер");
+                closeCodec();
+                pps = null;
+                skipping = true;      // wait for the next keyframe before feeding anything
+            }
+            sps = fresh;
             maybeConfigure();
             return;
         }
@@ -207,6 +217,7 @@ class StreamPlayer extends Thread {
     private void maybeConfigure() throws Exception {
         if (codec != null || sps == null || pps == null) return;
 
+        // Size here is a placeholder - the decoder reads the real one out of the SPS.
         MediaFormat fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1280, 800);
         fmt.setByteBuffer("csd-0", withStartCode(sps));
         fmt.setByteBuffer("csd-1", withStartCode(pps));
