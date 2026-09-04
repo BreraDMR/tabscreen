@@ -88,6 +88,14 @@ final class Model: ObservableObject {
     @Published var autostart = UserDefaults.standard.bool(forKey: "autostart") {
         didSet { UserDefaults.standard.set(autostart, forKey: "autostart") }
     }
+    /// 0, 90, 180 or 270 - how the tablet should turn the picture. Turning it there
+    /// costs nothing: the tablet's compositor does it while drawing.
+    @Published var rotation = UserDefaults.standard.integer(forKey: "rotation") {
+        didSet {
+            UserDefaults.standard.set(rotation, forKey: "rotation")
+            server.setRotation(rotation)
+        }
+    }
 
     private let capture = Capture()
     private let server = Server()
@@ -177,6 +185,7 @@ final class Model: ObservableObject {
             }
         }
 
+        server.setRotation(rotation)
         do {
             try server.start()
             print("сервер слушает 8090")
@@ -305,6 +314,18 @@ struct ContentView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help(L.refresh)
+            }
+
+            HStack {
+                Text(L.rotation).frame(width: 70, alignment: .leading)
+                Picker("", selection: $model.rotation) {
+                    Text("0°").tag(0)
+                    Text("90°").tag(90)
+                    Text("180°").tag(180)
+                    Text("270°").tag(270)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
             if !model.running {

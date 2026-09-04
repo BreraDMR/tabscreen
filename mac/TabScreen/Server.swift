@@ -34,6 +34,12 @@ final class Server: @unchecked Sendable {
     private var seq: UInt32 = 0
     private var sentAt: [UInt32: CFAbsoluteTime] = [:]
     private var header = Data()          // latest SPS + PPS, framed and ready
+    /// How the tablet should turn the picture. Sent on connect and whenever it changes.
+    private var rotation = 0
+
+    /// Sequence number that means "this packet is a short text command, not a frame".
+    /// Real frames never reach it - the counter would have to run for weeks.
+    static let commandSeq: UInt32 = 0xFFFF_FFFF
     private var sps: Data?
     private var pps: Data?
     private var framesThisSecond = 0
@@ -97,6 +103,7 @@ final class Server: @unchecked Sendable {
                 let count = self.clients.count
                 self.lock.unlock()
                 self.stats.clients = count
+                self.send(self.command("ROT \(self.rotation)"), to: client, isCommand: true)
                 if !self.header.isEmpty { self.send(self.header, to: client) }
             case .failed, .cancelled:
                 self.drop(client)
@@ -178,6 +185,20 @@ final class Server: @unchecked Sendable {
         for client in all { send(packet, to: client, isKeyframe: isKeyframe) }
     }
 
+    /// Tell every tablet how to turn the picture. Cheap enough to just resend.
+    func setRotation(_ degrees: Int) {
+        rotation = degrees
+        lock.lock()
+        let all = Array(clients.values)
+        lock.unlock()
+        let packet = command("ROT \(degrees)")
+        for client in all { send(packet, to: client, isCommand: true) }
+    }
+
+    private func command(_ text: String) -> Data {
+        frame(Data(text.utf8), seq: Server.commandSeq)
+    }
+
     private func frame(_ nal: Data, seq: UInt32) -> Data {
         var out = Data(capacity: nal.count + 8)
         var len = UInt32(nal.count).bigEndian
@@ -188,8 +209,18 @@ final class Server: @unchecked Sendable {
         return out
     }
 
-    private func send(_ data: Data, to client: Client, isKeyframe: Bool = false) {
+    private func send(_ data: Data, to client: Client, isKeyframe: Bool = false,
+                      isCommand: Bool = false) {
         client.lock.lock()
+        // Commands are tiny and must not be dropped along with a video backlog.
+        if isCommand {
+            client.queue.append(data)
+            let start = !client.sending
+            if start { client.sending = true }
+            client.lock.unlock()
+            if start { pump(client) }
+            return
+        }
         if client.waitingForKeyframe {
             if !isKeyframe {
                 client.lock.unlock()

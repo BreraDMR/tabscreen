@@ -33,6 +33,7 @@ enum L {
     static var creating: String { t("Creating a virtual screen…", "Создаю виртуальный экран…") }
     static var created: String { t("Virtual screen ready", "Виртуальный экран готов") }
     static var startOnLaunch: String { t("Turn on at launch", "Включать сразу при запуске") }
+    static var rotation: String { t("Rotation", "Поворот") }
     static var refresh: String { t("Refresh the list", "Обновить список") }
     static var connectFrom: String { t("Connect from the tablet:", "Подключись с планшета:") }
     static var orFind: String {
