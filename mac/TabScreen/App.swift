@@ -92,6 +92,11 @@ final class Model: ObservableObject {
     private let capture = Capture()
     private let server = Server()
 
+    /// What the user asked for, as opposed to what is happening right now: the stream
+    /// can drop on its own and we want to bring it back without them clicking anything.
+    private var wantsRunning = false
+    private var retryDelay = 2.0
+
     init() {
         refresh()
     }
@@ -126,11 +131,17 @@ final class Model: ObservableObject {
 
     func start() {
         guard let display = displays.first(where: { $0.id == chosenDisplay }) else {
-            problem = L.noScreenChosen
+            // No screen yet - BetterDisplay may still be bringing the virtual one back.
+            // Wait for it instead of giving up; "Stop" cancels the waiting.
+            wantsRunning = true
+            problem = L.screenGone
+            status = L.reconnecting
+            scheduleRecovery()
             return
         }
         problem = nil
         status = L.starting
+        wantsRunning = true
 
         server.onStats = { [weak self] stats in
             Task { @MainActor in
@@ -144,8 +155,7 @@ final class Model: ObservableObject {
         }
         capture.onError = { [weak self] message in
             Task { @MainActor in
-                self?.problem = message
-                self?.stop()
+                self?.captureLost(message)
             }
         }
 
@@ -164,19 +174,56 @@ final class Model: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
-                    self.problem = error
                     print("захват не пошёл: \(error)")
-                    self.server.stop()
-                    self.status = L.appReady
+                    // Same treatment as a stream that dies later: the screen may just not
+                    // be there yet (BetterDisplay still starting up), so keep trying.
+                    self.captureLost(error)
                 } else {
                     self.running = true
+                    self.retryDelay = 2
                     self.status = L.appRunning
                 }
             }
         }
     }
 
+    /// The virtual screen can disappear under us - BetterDisplay hands out a fresh
+    /// displayID every time it recreates one, and the old stream just dies. Don't make
+    /// the user notice and click things: find the screen again and pick up where we left.
+    private func captureLost(_ message: String) {
+        capture.stop()
+        running = false
+        clients = 0
+        latency = 0
+        fps = 0
+        guard wantsRunning else {
+            problem = message
+            status = L.appReady
+            return
+        }
+        status = L.reconnecting
+        scheduleRecovery()
+    }
+
+    private func scheduleRecovery() {
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, 30)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.wantsRunning else { return }
+            // refresh() re-points chosenDisplay at the virtual screen when the old id is gone
+            self.refresh()
+            guard self.displays.contains(where: { $0.id == self.chosenDisplay }) else {
+                self.problem = L.screenGone
+                self.scheduleRecovery()
+                return
+            }
+            self.problem = nil
+            self.start()
+        }
+    }
+
     func stop() {
+        wantsRunning = false
         capture.stop()
         server.stop()
         running = false
