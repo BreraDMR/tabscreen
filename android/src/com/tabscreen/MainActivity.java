@@ -219,8 +219,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     @Override public void surfaceChanged(SurfaceHolder h, int f, int w, int hh) {}
 
-    /** Turn the picture the way the Mac asked. At 90 and 270 the view is laid out with
-     *  width and height swapped, so once it is rotated it lands back inside the screen. */
+    /** The decoder turns the picture itself; all this has to do is give it a box of the
+     *  right shape, so a sideways picture isn't stretched across a landscape screen. */
     private void applyRotation(int degrees) {
         rotation = degrees;
         View parent = (View) video.getParent();
@@ -230,12 +230,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             return;
         }
         boolean sideways = degrees == 90 || degrees == 270;
-        FrameLayout.LayoutParams lp =
-                new FrameLayout.LayoutParams(sideways ? h : w, sideways ? w : h);
+        float ratio = sideways ? 800f / 1280f : 1280f / 800f;
+        int boxW = w, boxH = Math.round(w / ratio);
+        if (boxH > h) { boxH = h; boxW = Math.round(h * ratio); }
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(boxW, boxH);
         lp.gravity = Gravity.CENTER;
         video.setLayoutParams(lp);
-        video.setRotation(degrees);
-        Log.i("tabscreen", "поворот: " + degrees);
+        Log.i("tabscreen", "поворот: " + degrees + ", окно " + boxW + "x" + boxH);
     }
 
     @Override

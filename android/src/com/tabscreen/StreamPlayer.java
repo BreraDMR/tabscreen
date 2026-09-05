@@ -46,6 +46,9 @@ class StreamPlayer extends Thread {
     private BufferedInputStream buffered;
     private volatile OutputStream out;
     private long retryDelay = 1000;
+    /** Angle the Mac asked for. The decoder does the turning while it draws - rotating
+     *  the SurfaceView instead just leaves a black screen on this hardware. */
+    private volatile int rotation = 0;
     private final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
     private static final byte[] START = {0, 0, 0, 1};
     /** Sequence number the Mac uses for commands instead of video. */
@@ -125,7 +128,14 @@ class StreamPlayer extends Thread {
         if (!text.startsWith("ROT ")) return;
         try {
             int deg = Integer.parseInt(text.substring(4).trim());
-            if (deg == 0 || deg == 90 || deg == 180 || deg == 270) status.rotate(deg);
+            if (deg != 0 && deg != 90 && deg != 180 && deg != 270) return;
+            if (deg == rotation) return;
+            rotation = deg;
+            status.rotate(deg);          // the UI only resizes to keep the proportions
+            closeCodec();                // the angle is baked in at configure time
+            pps = null;
+            skipping = true;
+            Log.i("tabscreen", "поворот: " + deg + " - пересобираю декодер");
         } catch (NumberFormatException ignored) {}
     }
 
@@ -224,6 +234,7 @@ class StreamPlayer extends Thread {
         if (Build.VERSION.SDK_INT >= 30) {
             fmt.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);   // this is the whole point
         }
+        if (rotation != 0) fmt.setInteger(MediaFormat.KEY_ROTATION, rotation);
         fmt.setInteger(MediaFormat.KEY_PRIORITY, 0);          // realtime, not best-effort
         fmt.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
         fmt.setInteger("vendor.sec-dec-param.low-latency.value", 1);   // Exynos, если поймёт
