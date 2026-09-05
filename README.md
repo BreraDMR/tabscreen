@@ -46,6 +46,18 @@ blocks that, the app shows its address and a QR code — type it in on the table
 
 Now drag any window onto the new screen and it appears on the tablet.
 
+The virtual screen comes up when you turn the stream on and goes away when you stop it,
+so nothing is left hanging around collecting windows.
+
+### Rotation
+
+Four positions — 0°, 90°, 180°, 270° — set on the Mac, next to the screen picker. Handy
+when the tablet stands upright in a holder.
+
+The tablet's own decoder does the turning while it draws, which costs nothing, and it
+obeys the Mac: there is no setting on that side, and picking the tablet up and turning it
+over changes nothing.
+
 ## What to expect
 
 Measured on a MacBook Air M1 and a **Samsung Galaxy Tab A 10.1 from 2019** — 2 GB of RAM,
@@ -75,6 +87,18 @@ shown in the TabScreen window instead.
 **The tablet shows a black screen.** The Mac is capturing the wrong display — check the
 "Screen" dropdown, the virtual one is labelled *Virtual*. If there's no virtual screen in
 the list, press "Create virtual screen".
+
+**"Screen recording is off for this app", but the switch in System Settings is on.** The
+app is signed ad-hoc, so every rebuild changes its signature and the old permission stops
+matching while still looking granted. Clear it and grant it again:
+
+```bash
+tccutil reset ScreenCapture com.tabscreen.mac
+```
+
+Then open TabScreen and allow it. Do not press "Deny" in that dialog — that writes a
+refusal, and re-flipping the switch afterwards won't override it; you'd have to run the
+reset again.
 
 **"BetterDisplay isn't responding."** Start BetterDisplay by hand and wait until its icon
 appears in the menu bar, then try again.
@@ -111,6 +135,8 @@ Nothing is installed system-wide and no password is asked for. The Android clien
 
 - **Touch isn't wired up.** There's a working implementation in `dev/input.py`, but at any
   noticeable lag a finger-driven cursor feels wrong.
+- **Rotation is set on the Mac only** - by design, so the tablet can be handled without
+  the picture flipping around.
 - **BetterDisplay is required** for the virtual screen. No way around it on macOS.
 - **The app is unsigned** — first launch needs right-click → Open.
 - macOS 13+ and Android 8+.
