@@ -57,7 +57,10 @@ enum VirtualDisplay {
             // external monitor instead of the virtual one.
             return nil
         }
-        // BetterDisplay stayed silent - not installed, or not running. Only now guess.
+        // BetterDisplay stayed silent. If it is on this Mac at all, it is just busy -
+        // switching a screen off and straight back on keeps it quiet for a moment - and
+        // guessing here grabs the real monitor instead. Only guess when it isn't installed.
+        guard !betterDisplayInstalled else { return nil }
         let all = allDisplays()
         return all.last(where: { CGDisplayIsBuiltin($0.id) == 0 })?.id ?? all.last?.id
     }
