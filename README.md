@@ -1,9 +1,20 @@
-# TabScreen
+<div align="center">
+
+# 📱 TabScreen
 
 **Turn an old Android tablet into a second display for your Mac.**
 About 33 ms of lag over Wi-Fi. No subscription, no cables, no developer mode.
 
+[![Swift](https://img.shields.io/badge/Swift-mac%20app-F05138?logo=swift&logoColor=white&style=for-the-badge)](mac/TabScreen)
+[![ScreenCaptureKit](https://img.shields.io/badge/ScreenCaptureKit-capture-000000?logo=apple&logoColor=white&style=for-the-badge)](mac/TabScreen/Capture.swift)
+[![VideoToolbox](https://img.shields.io/badge/VideoToolbox-h264%20encode-000000?logo=apple&logoColor=white&style=for-the-badge)](docs/HOW-IT-WORKS.md)
+[![Java](https://img.shields.io/badge/Java-android%20app-007396?logo=openjdk&logoColor=white&style=for-the-badge)](android/src/com/tabscreen)
+[![MediaCodec](https://img.shields.io/badge/MediaCodec-hw%20decode-3DDC84?logo=android&logoColor=white&style=for-the-badge)](android/src/com/tabscreen/StreamPlayer.java)
+[![~33 ms](https://img.shields.io/badge/latency-~33%20ms-4CAF50?style=for-the-badge)](docs/HOW-IT-WORKS.md)
+
 <img src="docs/app.png" width="420" alt="TabScreen on the Mac">
+
+</div>
 
 spacedesk only ships a Windows server. Sidecar only talks to iPads. Duet wants a yearly
 fee. If you have a MacBook and an Android tablet gathering dust in a drawer, this is the
