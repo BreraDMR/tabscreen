@@ -223,6 +223,15 @@ final class Model: ObservableObject {
         clients = 0
         latency = 0
         fps = 0
+        // Retrying a permission problem just makes macOS ask again, over and over.
+        // Stop and say what to do instead.
+        if message.hasPrefix(L.noScreenAccess) {
+            wantsRunning = false
+            server.stop()
+            problem = L.grantAccess
+            status = L.appReady
+            return
+        }
         guard wantsRunning else {
             problem = message
             status = L.appReady
